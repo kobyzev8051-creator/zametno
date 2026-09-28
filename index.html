@@ -1,0 +1,1750 @@
+<!DOCTYPE html>
+<!-- «Заметно» — заметки и дела. © 2026 Кобызев С. Е. Все права защищены. -->
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Заметно</title>
+  <meta name="author" content="Кобызев С. Е.">
+  <meta name="description" content="Простые заметки с отметкой о выполнении, поиском, корзиной и экспортом в PDF и Excel.">
+
+  <!-- Установка как приложение (Android, iPhone, Windows, macOS, Linux) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#3d5a80">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Заметно">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <style>
+    :root {
+      /* Спокойная деловая палитра: нейтральный фон, белые блоки,
+         сине-серый — основной цвет, зелёный — только «выполнено» */
+      --bg: #f2f3f5;
+      --card: #ffffff;
+      --text: #1f2933;
+      --muted: #6b7480;
+      --border: #e0e4e9;
+      --accent: #3d5a80;
+      --accent-hover: #324b6b;
+      --accent-soft: #e9eff7;
+      --secondary: #eef0f3;
+      --secondary-hover: #e2e6eb;
+      --locked: #f7f8fa;        /* заметка открыта только для чтения */
+      --field: #f1f3f6;         /* заливка поля поиска */
+      --todo: #9db0c9;          /* полоска невыполненной заметки */
+      --done: #3f7f63;          /* выполнено: полоска, галочка, метки */
+      --done-soft: #f0f7f2;
+      --done-soft-hover: #e6f1ea;
+      --done-border: #d3e7da;
+      --error: #b0423a;
+      --error-bg: #fbeae7;
+      --strike: #3f7f63;        /* цвет зачёркивания выполненных заметок */
+      --strike-width: 1.5px;
+      --mark: #fde7a7;          /* подсветка найденного текста */
+      --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.04);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121417;
+        --card: #1b1f24;
+        --text: #e6e8eb;
+        --muted: #9aa3ad;
+        --border: #2d333b;
+        --accent: #5b7fad;
+        --accent-hover: #6a8dbb;
+        --accent-soft: #212c3a;
+        --secondary: #262c33;
+        --secondary-hover: #2f363e;
+        --locked: #20252b;
+        --field: #242a31;
+        --todo: #4d6380;
+        --done: #6cbb93;
+        --done-soft: #1b2822;
+        --done-soft-hover: #213129;
+        --done-border: #2c4538;
+        --error: #f2867d;
+        --error-bg: #3a2220;
+        --strike: #5fae88;
+        --strike-width: 1px;
+        --mark: #6b5617;
+        --shadow: none;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      justify-content: center;
+      padding: 32px 16px 48px;
+    }
+
+    .page {
+      width: 100%;
+      max-width: 720px;
+    }
+
+    /* Два белых блока на нейтральном фоне: редактор и список */
+    .panel {
+      margin-top: 16px;
+      padding: 20px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+    }
+
+    .head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 0 4px;
+    }
+
+    h1 {
+      margin: 0 0 4px;
+      font-size: 1.6rem;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .banner {
+      display: none;
+      margin: 16px 0 0;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: var(--error-bg);
+      color: var(--error);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    .banner.show { display: block; }
+
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      padding: 16px;
+      font: inherit;
+      font-size: 1rem;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    textarea:focus { border-color: var(--accent); }
+    textarea[readonly] {
+      background: var(--locked);
+      cursor: default;
+    }
+
+    .bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .status {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .status.error {
+      color: var(--error);
+      font-weight: 600;
+    }
+
+    .bar .status { flex: 1 1 100%; } /* статус — отдельной строкой над кнопками */
+    .buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+    .buttons button { padding: 10px 16px; }
+
+    button {
+      font: inherit;
+      font-size: 0.95rem;
+      font-weight: 600;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    #saveBtn { background: var(--accent); color: #fff; }
+    #saveBtn:not(:disabled):hover { background: var(--accent-hover); }
+
+    #deleteBtn { background: var(--secondary); color: var(--error); }
+    #deleteBtn:not(:disabled):hover { background: var(--secondary-hover); }
+
+    /* Кнопка в режиме подтверждения («Точно удалить?») */
+    button.armed,
+    button.armed:not(:disabled):hover { background: var(--error); color: #fff; }
+
+    /* Корзина */
+    .trash {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .trash summary {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      font-weight: 700;
+      color: var(--muted);
+      cursor: pointer;
+      list-style: none;
+    }
+    .trash summary::-webkit-details-marker { display: none; }
+    .trash summary::after {
+      content: '▸';
+      font-size: 0.8rem;
+      transition: transform 0.15s;
+    }
+    .trash[open] summary::after { transform: rotate(90deg); }
+    .trash summary:hover { color: var(--text); }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .title-row .note-title { min-width: 0; }
+    .trash .hint { margin: 10px 0; }
+
+    .trash-item {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px 12px;
+      padding: 10px 14px;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+    }
+    .trash-item .info {
+      flex: 1;
+      min-width: 160px;
+    }
+    .trash-item .note-title { color: var(--muted); }
+
+    .badge {
+      flex-shrink: 0;
+      padding: 1px 8px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge.done {
+      background: var(--done-soft);
+      color: var(--done);
+      box-shadow: inset 0 0 0 1px var(--done-border);
+    }
+
+    .trash-actions { display: flex; gap: 6px; }
+    .small-btn {
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      background: var(--secondary);
+      color: var(--text);
+    }
+    .small-btn:hover { background: var(--secondary-hover); }
+    .small-btn.danger { color: var(--error); }
+
+    .trash-footer {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 10px;
+    }
+
+    #editBtn, #cancelBtn { background: var(--secondary); color: var(--text); }
+    #editBtn:not(:disabled):hover, #cancelBtn:not(:disabled):hover { background: var(--secondary-hover); }
+
+    /* «Новая заметка» стоит на цветном фоне страницы — делаем её светлой с рамкой */
+    #newBtn {
+      background: var(--card);
+      color: var(--accent);
+      border: 1px solid var(--border);
+    }
+    #newBtn:hover { border-color: var(--accent); }
+
+    h1 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    h1 .logo { border-radius: 8px; }
+
+    .head-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .help-btn {
+      font-size: 1.05rem;
+      font-weight: 700;
+      text-decoration: none;
+      border-radius: 10px;
+      color: var(--accent);
+    }
+
+    .app-footer {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .app-footer a { color: var(--accent); }
+
+    #installBtn { background: var(--accent); color: #fff; }
+    #installBtn:hover { background: var(--accent-hover); }
+
+    h2 {
+      margin: 32px 0 12px;
+      font-size: 1.05rem;
+    }
+
+    .list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-left: 14px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--todo);   /* полоска статуса */
+      border-radius: 10px;
+      transition: background 0.15s;
+    }
+    .item:hover { background: var(--locked); }
+
+    /* Выполненные — бледно-зелёный фон и зелёная полоска */
+    .item.done {
+      background: var(--done-soft);
+      border-color: var(--done-border);
+      border-left-color: var(--done);
+    }
+    .item.done:hover { background: var(--done-soft-hover); }
+    .item.done .note-time { color: var(--done); }
+
+    /* Открытая в редакторе заметка — рамка основного цвета, полоска статуса остаётся */
+    .item.active {
+      background: var(--accent-soft);
+      border-top-color: var(--accent);
+      border-right-color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .item input[type="checkbox"] {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      margin: 0;
+      accent-color: var(--done); /* галочка «выполнено» — зелёная */
+      cursor: pointer;
+    }
+
+    .item .open-btn {
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+      padding: 12px 0;
+      font-weight: 400;
+      background: transparent;
+      color: var(--text);
+      border-radius: 0;
+    }
+
+    /* Ручка для перетаскивания */
+    .item .handle {
+      flex-shrink: 0;
+      align-self: stretch;
+      padding: 0 14px;
+      font-size: 1.2rem;
+      font-weight: 400;
+      line-height: 1;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 0 10px 10px 0;
+      cursor: grab;
+      touch-action: none; /* чтобы на телефоне страница не прокручивалась при перетаскивании */
+    }
+    .item .handle:hover { color: var(--text); }
+
+    .item.dragging {
+      position: relative;
+      z-index: 1;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      transition: none;
+    }
+    .item.dragging .handle { cursor: grabbing; }
+
+    .list-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 0 0 12px;
+    }
+    .list-head h2 { margin: 0; }
+    .hint {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    /* Линия отделяет панель инструментов (вид, экспорт, поиск) от списка */
+    #listHint {
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .list-tools {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Экспорт */
+    .export { position: relative; }
+    .icon-btn {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      background: var(--secondary);
+      color: var(--text);
+    }
+    .icon-btn:hover,
+    .icon-btn[aria-expanded="true"] { background: var(--secondary-hover); }
+
+    .export-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      z-index: 10;
+      width: 260px;
+      padding: 6px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    }
+    .menu-title {
+      margin: 4px 10px 6px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--muted);
+    }
+    .export-menu button {
+      display: block;
+      width: 100%;
+      padding: 8px 10px;
+      text-align: left;
+      font-weight: 400;
+      background: transparent;
+      color: var(--text);
+      border-radius: 8px;
+    }
+    .export-menu button:hover { background: var(--secondary); }
+    .export-menu b { display: block; font-size: 0.9rem; }
+    .export-menu span { display: block; font-size: 0.8rem; color: var(--muted); }
+
+    /* Переключатель вида списка */
+    .view-switch {
+      display: inline-flex;
+      padding: 3px;
+      gap: 2px;
+      background: var(--secondary);
+      border-radius: 10px;
+    }
+    .view-switch button {
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 8px;
+    }
+    .view-switch button:hover { color: var(--text); }
+    .view-switch button[aria-pressed="true"] {
+      background: var(--card);
+      color: var(--text);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    }
+
+    /* Группы «Не выполнено» / «Выполнено» */
+    .group + .group { margin-top: 20px; }
+    .group h3 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 8px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .count {
+      padding: 1px 8px;
+      border-radius: 999px;
+      background: var(--secondary);
+      font-size: 0.75rem;
+      letter-spacing: 0;
+    }
+
+    /* Цветная точка и счётчик у групп — в цвет статуса */
+    .group h3::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--todo);
+    }
+    .group-todo .count { background: var(--accent-soft); color: var(--accent); }
+    .group-done h3::before { background: var(--done); }
+    .group-done .count { background: var(--done-soft); color: var(--done); }
+
+    .item.done .note-title {
+      text-decoration: line-through;
+      text-decoration-color: var(--strike);
+      text-decoration-thickness: var(--strike-width);
+    }
+
+    /* Поиск */
+    .search {
+      position: relative;
+      margin: 0 0 8px;
+    }
+    .search input {
+      width: 100%;
+      padding: 10px 40px 10px 38px;
+      font: inherit;
+      font-size: 0.95rem;
+      color: var(--text);
+      background: var(--field);           /* серая заливка — не похоже на карточку заметки */
+      border: 1px solid transparent;
+      border-radius: 10px;
+      outline: none;
+      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+    }
+    .search input:hover { border-color: var(--border); }
+    .search input:focus {
+      background: var(--card);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .search input::placeholder { color: var(--muted); }
+    .search .icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+    }
+    .search .clear {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      padding: 4px 10px;
+      font-size: 1.1rem;
+      font-weight: 400;
+      line-height: 1;
+      background: transparent;
+      color: var(--muted);
+    }
+    .search .clear:hover { color: var(--text); background: var(--secondary); }
+
+    mark {
+      background: var(--mark);
+      color: inherit;
+      border-radius: 3px;
+      padding: 0 1px;
+    }
+
+    .note-snippet {
+      display: block;
+      margin-top: 2px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--muted);
+    }
+
+    .note-title {
+      display: block;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .note-time {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .empty {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    /* ---------- Документ для печати / PDF ---------- */
+    #printArea {
+      display: none;
+      color: #1f2933;
+      background: #fff;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    #printArea h1 { margin: 0 0 4pt; font-size: 20pt; }
+    #printArea .print-meta {
+      margin: 0 0 12pt;
+      padding-bottom: 8pt;
+      border-bottom: 1px solid #e0e4e9;
+      color: #6b7480;
+      font-size: 10pt;
+    }
+    #printArea h2 { margin: 14pt 0 6pt; font-size: 12pt; color: #3d5a80; }
+    #printArea h2.p-h-done { color: #3f7f63; }
+    #printArea ul { margin: 0; padding: 0; list-style: none; }
+    #printArea li {
+      display: flex;
+      gap: 8pt;
+      margin-bottom: 5pt;
+      padding: 5pt 0 5pt 8pt;
+      border-left: 3pt solid #9db0c9;
+      break-inside: avoid;   /* заметка не разрывается между страницами */
+    }
+    #printArea li.p-done { border-left-color: #3f7f63; }
+    #printArea .p-box { font-size: 12pt; line-height: 1.3; color: #3d5a80; }
+    #printArea li.p-done .p-box { color: #3f7f63; }
+    #printArea .p-text { white-space: pre-wrap; font-size: 11pt; line-height: 1.4; }
+    #printArea li.p-done .p-text {
+      color: #6b7480;
+      text-decoration: line-through;
+      text-decoration-color: #3f7f63;
+    }
+    #printArea .p-date { margin-top: 2pt; font-size: 9pt; color: #6b7480; }
+    #printArea .print-foot {
+      margin-top: 18pt;
+      padding-top: 6pt;
+      border-top: 1px solid #e0e4e9;
+      color: #6b7480;
+      font-size: 8.5pt;
+    }
+
+    @media print {
+      @page { margin: 16mm; }
+      body { display: block; padding: 0; background: #fff; }
+      .page { display: none !important; }
+      #printArea { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="head">
+      <div>
+        <h1><img class="logo" src="icons/icon.svg" alt="" width="34" height="34"> Заметно</h1>
+        <p class="subtitle">Пишите и нажимайте «Сохранить» — заметка уйдёт в список ниже. Чтобы изменить, откройте её и нажмите «Редактировать».</p>
+      </div>
+      <div class="head-actions">
+        <button id="installBtn" hidden title="Установить «Заметно» как приложение">Установить</button>
+        <button id="newBtn">+ Новая заметка</button>
+        <a class="icon-btn help-btn" href="help.html" title="Справка — инструкция пользователя" aria-label="Справка">?</a>
+      </div>
+    </header>
+
+    <div class="banner" id="banner">
+      В этом окне браузер запрещает сохранять данные, поэтому заметки не сохранятся.
+      Откройте приложение по его обычному адресу в браузере или установите его.
+    </div>
+
+    <section class="panel editor-panel">
+    <textarea id="note" placeholder="Начните писать здесь..."></textarea>
+
+    <div class="bar">
+      <span class="status" id="status">Новая заметка</span>
+      <div class="buttons">
+        <button id="deleteBtn">Удалить</button>
+        <button id="cancelBtn" title="Закрыть заметку без сохранения (Esc)">Отменить</button>
+        <button id="editBtn">Редактировать</button>
+        <button id="saveBtn">Сохранить</button>
+      </div>
+    </div>
+    </section>
+
+    <section class="panel list-panel">
+    <div class="list-head">
+      <h2>Сохранённые заметки</h2>
+      <div class="list-tools">
+        <div class="view-switch" role="group" aria-label="Вид списка">
+          <button data-view="plain" aria-pressed="true">Обычный</button>
+          <button data-view="grouped" aria-pressed="false">По статусу</button>
+        </div>
+        <div class="export">
+          <button class="icon-btn" id="exportBtn" title="Экспорт в файл" aria-label="Экспорт в файл"
+                  aria-haspopup="menu" aria-expanded="false">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>
+            </svg>
+          </button>
+          <div class="export-menu" id="exportMenu" role="menu" hidden>
+            <p class="menu-title">Экспорт в файл</p>
+            <button role="menuitem" data-format="pdf">
+              <b>Документ PDF (.pdf)</b>
+              <span>В окне печати выберите «Сохранить как PDF»</span>
+            </button>
+            <button role="menuitem" data-format="xlsx">
+              <b>Таблица Excel (.xlsx)</b>
+              <span>Excel, Google Таблицы, Numbers, LibreOffice</span>
+            </button>
+            <button role="menuitem" data-format="txt">
+              <b>Текстовый файл (.txt)</b>
+              <span>Удобно читать и распечатать</span>
+            </button>
+            <button role="menuitem" data-format="json">
+              <b>Резервная копия (.json)</b>
+              <span>Все данные, включая корзину</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="search">
+      <span class="icon" aria-hidden="true">🔍</span>
+      <input type="text" id="search" placeholder="Поиск по заметкам…" aria-label="Поиск по заметкам" autocomplete="off">
+      <button class="clear" id="clearSearch" aria-label="Очистить поиск" title="Очистить поиск (Esc)" hidden>×</button>
+    </div>
+    <p class="hint" id="listHint">Порядок — перетащите за ⠿</p>
+    <div id="list"></div>
+
+    <details class="trash" id="trashBox" hidden>
+      <summary>🗑 Корзина <span class="count" id="trashCount">0</span></summary>
+      <p class="hint">Удалённые заметки можно восстановить — вместе с отметкой о выполнении.</p>
+      <ul class="list" id="trashList"></ul>
+      <div class="trash-footer">
+        <button class="small-btn danger" id="clearTrashBtn">Очистить корзину</button>
+      </div>
+    </details>
+    </section>
+
+    <footer class="app-footer">
+      © 2026 Кобызев С. Е. Все права защищены. · <a href="help.html">Справка</a>
+    </footer>
+  </main>
+
+  <!-- Документ для печати / PDF — заполняется при экспорте, на экране не виден -->
+  <div id="printArea" aria-hidden="true"></div>
+
+  <script>
+    const note = document.getElementById('note');
+    const saveBtn = document.getElementById('saveBtn');
+    const editBtn = document.getElementById('editBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const newBtn = document.getElementById('newBtn');
+    const deleteBtn = document.getElementById('deleteBtn');
+    const status = document.getElementById('status');
+    const list = document.getElementById('list');
+    const banner = document.getElementById('banner');
+
+    const STORAGE_KEY = 'my-notes';
+    const OLD_KEY = 'my-note'; // одна заметка из прошлой версии страницы
+    const VIEW_KEY = 'my-notes-view';
+    const TRASH_KEY = 'my-notes-trash';
+
+    const trashBox = document.getElementById('trashBox');
+    const trashList = document.getElementById('trashList');
+    const trashCount = document.getElementById('trashCount');
+    const clearTrashBtn = document.getElementById('clearTrashBtn');
+
+    let notes = [];        // [{ id, text, time, done }]
+    let trash = [];        // удалённые: [{ ...заметка, pos, deletedAt }]
+    let currentId = null;  // null — новая, ещё не сохранённая заметка
+    let view = 'plain';    // 'plain' — обычный список, 'grouped' — по статусу
+    try { if (localStorage.getItem(VIEW_KEY) === 'grouped') view = 'grouped'; } catch (e) {}
+
+    const viewButtons = document.querySelectorAll('.view-switch button');
+
+    // Поиск
+    const searchInput = document.getElementById('search');
+    const clearSearchBtn = document.getElementById('clearSearch');
+    const listHint = document.getElementById('listHint');
+    let query = '';
+
+    // Без учёта регистра и разницы между «ё» и «е»
+    function norm(s) {
+      return s.toLowerCase().replace(/ё/g, 'е');
+    }
+
+    function matches(n) {
+      return !query || norm(n.text).includes(norm(query));
+    }
+
+    // Вставляет текст в элемент, подсвечивая найденное
+    function appendHighlighted(el, text) {
+      const q = norm(query);
+      if (!q) { el.append(text); return; }
+      const hay = norm(text);
+      let from = 0;
+      let k;
+      while ((k = hay.indexOf(q, from)) !== -1) {
+        if (k > from) el.append(text.slice(from, k));
+        const mark = document.createElement('mark');
+        mark.textContent = text.slice(k, k + q.length);
+        el.append(mark);
+        from = k + q.length;
+      }
+      el.append(text.slice(from));
+    }
+
+    function setQuery(q) {
+      query = q.trim();
+      clearSearchBtn.hidden = q === '';
+      renderList();
+    }
+    searchInput.addEventListener('input', () => setQuery(searchInput.value));
+    clearSearchBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      setQuery('');
+      searchInput.focus();
+    });
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation(); // Esc в поиске очищает поиск, а не закрывает заметку
+        searchInput.value = '';
+        setQuery('');
+      }
+    });
+
+    function setView(v) {
+      view = v;
+      try { localStorage.setItem(VIEW_KEY, v); } catch (e) {}
+      viewButtons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
+      renderList();
+    }
+    viewButtons.forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+    viewButtons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === view)));
+
+    function showStatus(text, isError) {
+      status.textContent = text;
+      status.classList.toggle('error', !!isError);
+    }
+
+    // Переключает режим: просмотр (заблокировано) или редактирование
+    function setEditing(editing) {
+      note.readOnly = !editing;
+      saveBtn.disabled = !editing;
+      editBtn.disabled = editing;
+      // Отменить можно, когда в поле открыта заметка из списка
+      cancelBtn.disabled = currentId === null;
+      // Удалить можно только уже сохранённую заметку
+      deleteBtn.disabled = currentId === null;
+      if (editing) note.focus();
+    }
+
+    // Кнопка с подтверждением в два клика: первый — «Точно?», второй — действие.
+    // Через 3 секунды без второго клика кнопка возвращается в обычный вид.
+    function confirmTwice(btn, label, confirmLabel, action) {
+      let timer = null;
+      function reset() {
+        clearTimeout(timer);
+        btn.classList.remove('armed');
+        btn.textContent = label;
+      }
+      btn.textContent = label;
+      btn.addEventListener('click', () => {
+        if (btn.classList.contains('armed')) {
+          reset();
+          action();
+          return;
+        }
+        btn.classList.add('armed');
+        btn.textContent = confirmLabel;
+        timer = setTimeout(reset, 3000);
+      });
+    }
+
+    // Сохраняет изменения; если не получилось — откатывает notes и trash
+    function commit(errorText) {
+      if (writeStorage()) return true;
+      notes = JSON.parse(snapshot.notes);
+      trash = JSON.parse(snapshot.trash);
+      banner.classList.add('show');
+      showStatus(errorText, true);
+      renderList();
+      return false;
+    }
+    let snapshot = { notes: '[]', trash: '[]' };
+    function takeSnapshot() {
+      snapshot = { notes: JSON.stringify(notes), trash: JSON.stringify(trash) };
+    }
+
+    // «Удалить» — переносит заметку в корзину (её можно восстановить)
+    function deleteCurrentNote() {
+      takeSnapshot();
+      const pos = notes.findIndex(n => n.id === currentId);
+      // Запоминаем соседа сверху — по нему заметка вернётся на своё место
+      const prevId = pos > 0 ? notes[pos - 1].id : null;
+      const [removed] = notes.splice(pos, 1);
+      trash.unshift({ ...removed, pos, prevId, deletedAt: nowText() });
+      if (!commit('Не удалось удалить')) return;
+      currentId = null;
+      note.value = '';
+      setEditing(true);
+      showStatus('Заметка перемещена в корзину');
+      renderList();
+    }
+
+    // Возвращает заметку на прежнее место, с прежним статусом выполнения
+    function restoreNote(id) {
+      takeSnapshot();
+      const i = trash.findIndex(t => t.id === id);
+      const [{ pos, prevId, deletedAt, ...restored }] = trash.splice(i, 1);
+      let at;
+      if (prevId === null) {
+        at = 0; // стояла первой
+      } else {
+        const prevIndex = notes.findIndex(n => n.id === prevId);
+        // Сосед на месте — ставим сразу после него; иначе — на прежний номер
+        at = prevIndex >= 0 ? prevIndex + 1 : Math.min(pos, notes.length);
+      }
+      notes.splice(at, 0, restored);
+      if (!commit('Не удалось восстановить')) return;
+      showStatus('Заметка восстановлена');
+      renderList();
+    }
+
+    function deleteForever(id) {
+      takeSnapshot();
+      trash = trash.filter(t => t.id !== id);
+      if (!commit('Не удалось удалить')) return;
+      showStatus('Заметка удалена навсегда');
+      renderList();
+    }
+
+    function clearTrash() {
+      takeSnapshot();
+      trash = [];
+      if (!commit('Не удалось очистить корзину')) return;
+      showStatus('Корзина очищена');
+      renderList();
+    }
+
+    function nowText() {
+      return new Date().toLocaleString('ru-RU', {
+        day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
+      });
+    }
+
+    function renderTrash() {
+      trashBox.hidden = trash.length === 0;
+      trashCount.textContent = trash.length;
+      trashList.innerHTML = '';
+      for (const t of trash) {
+        const li = document.createElement('li');
+        li.className = 'trash-item';
+
+        const info = document.createElement('div');
+        info.className = 'info';
+        const title = document.createElement('span');
+        title.className = 'note-title';
+        title.textContent = t.text.trim().split('\n')[0] || 'Без текста';
+        const time = document.createElement('span');
+        time.className = 'note-time';
+        time.textContent = 'Удалена ' + t.deletedAt;
+        const badge = document.createElement('span');
+        badge.className = 'badge' + (t.done ? ' done' : '');
+        badge.textContent = t.done ? 'Выполнена' : 'Не выполнена';
+        const titleRow = document.createElement('div');
+        titleRow.className = 'title-row';
+        titleRow.append(title, badge);
+        info.append(titleRow, time);
+
+        const actions = document.createElement('div');
+        actions.className = 'trash-actions';
+        const restoreBtn = document.createElement('button');
+        restoreBtn.className = 'small-btn';
+        restoreBtn.textContent = 'Восстановить';
+        restoreBtn.addEventListener('click', () => restoreNote(t.id));
+        const foreverBtn = document.createElement('button');
+        foreverBtn.className = 'small-btn danger';
+        confirmTwice(foreverBtn, 'Удалить навсегда', 'Точно удалить?', () => deleteForever(t.id));
+        actions.append(restoreBtn, foreverBtn);
+
+        li.append(info, actions);
+        trashList.append(li);
+      }
+    }
+
+    function currentNote() {
+      return notes.find(n => n.id === currentId);
+    }
+
+    // Есть ли в поле текст, который ещё не сохранён
+    function hasUnsavedChanges() {
+      if (note.readOnly) return false;
+      const saved = currentNote();
+      return note.value !== (saved ? saved.text : '') && note.value.trim() !== '';
+    }
+
+    function renderList() {
+      renderTrash();
+      list.innerHTML = '';
+      const shown = notes.filter(matches);
+      listHint.textContent = query
+        ? `Найдено: ${shown.length} из ${notes.length}`
+        : 'Порядок — перетащите за ⠿';
+      if (notes.length === 0) {
+        list.innerHTML = '<p class="empty">Пока нет сохранённых заметок.</p>';
+        return;
+      }
+      if (shown.length === 0) {
+        const p = document.createElement('p');
+        p.className = 'empty';
+        p.textContent = `Ничего не найдено по запросу «${query}».`;
+        list.append(p);
+        return;
+      }
+      if (view === 'plain') {
+        list.append(renderItems(shown));
+        return;
+      }
+      const groups = [
+        { title: 'Не выполнено', kind: 'todo', items: shown.filter(n => !n.done), empty: query ? 'Ничего не найдено' : 'Всё выполнено 🎉' },
+        { title: 'Выполнено', kind: 'done', items: shown.filter(n => n.done), empty: query ? 'Ничего не найдено' : 'Пока ничего не выполнено' },
+      ];
+      for (const g of groups) {
+        const section = document.createElement('section');
+        section.className = 'group group-' + g.kind;
+        const h3 = document.createElement('h3');
+        const count = document.createElement('span');
+        count.className = 'count';
+        count.textContent = g.items.length;
+        h3.append(g.title, count);
+        section.append(h3);
+        if (g.items.length === 0) {
+          const p = document.createElement('p');
+          p.className = 'empty';
+          p.textContent = g.empty;
+          section.append(p);
+        } else {
+          section.append(renderItems(g.items));
+        }
+        list.append(section);
+      }
+    }
+
+    function renderItems(items) {
+      const ul = document.createElement('ul');
+      ul.className = 'list';
+      for (const n of items) {
+        const li = document.createElement('li');
+        li.className = 'item';
+        li.dataset.id = n.id;
+        if (n.id === currentId) li.classList.add('active');
+        if (n.done) li.classList.add('done');
+
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.checked = !!n.done;
+        check.title = 'Отметить как выполненную';
+        check.setAttribute('aria-label', 'Выполнено');
+        check.addEventListener('change', () => toggleDone(n.id));
+
+        const btn = document.createElement('button');
+        btn.className = 'open-btn';
+
+        const title = document.createElement('span');
+        title.className = 'note-title';
+        const firstLine = n.text.trim().split('\n')[0] || 'Без текста';
+        appendHighlighted(title, firstLine);
+        btn.append(title);
+
+        // Если найдено не в первой строке — показываем строку, где нашлось
+        if (query && !norm(firstLine).includes(norm(query))) {
+          const line = n.text.split('\n').find(l => norm(l).includes(norm(query)));
+          if (line) {
+            const k = norm(line).indexOf(norm(query));
+            const start = Math.max(0, k - 30);
+            const snippet = document.createElement('span');
+            snippet.className = 'note-snippet';
+            appendHighlighted(snippet, (start > 0 ? '…' : '') + line.slice(start).trim());
+            btn.append(snippet);
+          }
+        }
+
+        const time = document.createElement('span');
+        time.className = 'note-time';
+        time.textContent = n.time + (n.done ? ' · выполнено' : '');
+
+        btn.append(time);
+        btn.addEventListener('click', () => openNote(n.id));
+
+        const handle = document.createElement('button');
+        handle.className = 'handle';
+        handle.textContent = '⠿';
+        handle.title = 'Перетащите, чтобы изменить порядок (или стрелки ↑ ↓)';
+        handle.setAttribute('aria-label', 'Переместить заметку');
+        handle.addEventListener('pointerdown', (e) => startDrag(e, li, handle));
+        handle.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            moveNote(n.id, e.key === 'ArrowUp' ? -1 : 1);
+          }
+        });
+
+        li.append(check, btn, handle);
+        ul.append(li);
+      }
+      return ul;
+    }
+
+    // Сохраняет новый порядок; если не получилось — возвращает прежний
+    function saveOrder(newNotes) {
+      const previous = notes;
+      notes = newNotes;
+      if (!writeStorage()) {
+        notes = previous;
+        banner.classList.add('show');
+        showStatus('Не удалось сохранить порядок', true);
+      }
+      renderList();
+    }
+
+    // Перемещение стрелками с клавиатуры
+    function moveNote(id, step) {
+      const i = notes.findIndex(n => n.id === id);
+      let j = i + step;
+      // Меняемся местами с соседом, которого видно на экране:
+      // при поиске — только с найденными, в виде «По статусу» — только внутри группы
+      const visibleNeighbour = (m) =>
+        matches(m) && (view !== 'grouped' || !!m.done === !!notes[i].done);
+      while (j >= 0 && j < notes.length && !visibleNeighbour(notes[j])) j += step;
+      if (j < 0 || j >= notes.length) return;
+      const newNotes = notes.slice();
+      [newNotes[i], newNotes[j]] = [newNotes[j], newNotes[i]];
+      saveOrder(newNotes);
+      list.querySelector(`[data-id="${id}"] .handle`).focus();
+    }
+
+    // Перетаскивание мышью или пальцем
+    function startDrag(e, li, handle) {
+      e.preventDefault();
+      handle.setPointerCapture(e.pointerId);
+      li.classList.add('dragging');
+      const ul = li.parentElement; // в виде «По статусу» — список своей группы
+      const gap = parseFloat(getComputedStyle(ul).rowGap) || 0;
+      let startY = e.clientY;
+
+      function onMove(ev) {
+        li.style.transform = `translateY(${ev.clientY - startY}px)`;
+        const r = li.getBoundingClientRect();
+        const center = r.top + r.height / 2;
+
+        // Когда заметка заходит за середину соседней — меняем их местами.
+        // Двигаем только соседей: если переставить саму заметку,
+        // браузер перестанет отслеживать палец/мышь и отпускание потеряется.
+        let next = li.nextElementSibling;
+        while (next) {
+          const nr = next.getBoundingClientRect();
+          if (center <= nr.top + nr.height / 2) break;
+          ul.insertBefore(next, li);
+          startY += nr.height + gap;
+          next = li.nextElementSibling;
+        }
+        let prev = li.previousElementSibling;
+        while (prev) {
+          const pr = prev.getBoundingClientRect();
+          if (center >= pr.top + pr.height / 2) break;
+          ul.insertBefore(prev, li.nextElementSibling);
+          startY -= pr.height + gap;
+          prev = li.previousElementSibling;
+        }
+        li.style.transform = `translateY(${ev.clientY - startY}px)`;
+      }
+
+      let finished = false;
+      function onEnd() {
+        if (finished) return;
+        finished = true;
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onEnd);
+        handle.removeEventListener('pointercancel', onEnd);
+        handle.removeEventListener('lostpointercapture', onEnd);
+        li.style.transform = '';
+        li.classList.remove('dragging');
+
+        // Новый порядок заметок этого списка раскладываем по тем же местам,
+        // которые они занимали в общем списке. Так перетаскивание внутри
+        // группы не перемешивает обычный вид.
+        const order = [...ul.children].map(el => Number(el.dataset.id));
+        const ids = new Set(order);
+        const slots = [];
+        notes.forEach((n, i) => { if (ids.has(n.id)) slots.push(i); });
+        const changed = slots.some((slot, k) => notes[slot].id !== order[k]);
+        if (changed) {
+          const newNotes = notes.slice();
+          slots.forEach((slot, k) => { newNotes[slot] = notes.find(n => n.id === order[k]); });
+          saveOrder(newNotes);
+        }
+      }
+
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup', onEnd);
+      handle.addEventListener('pointercancel', onEnd);
+      handle.addEventListener('lostpointercapture', onEnd);
+    }
+
+    // Отмечает заметку выполненной или снимает отметку
+    function toggleDone(id) {
+      const n = notes.find(x => x.id === id);
+      n.done = !n.done;
+      if (!writeStorage()) {
+        n.done = !n.done;
+        banner.classList.add('show');
+        showStatus('Не удалось сохранить отметку', true);
+      }
+      renderList();
+    }
+
+    function openNote(id) {
+      if (hasUnsavedChanges()) {
+        showStatus('Сначала сохраните текущую заметку', true);
+        return;
+      }
+      const n = notes.find(x => x.id === id);
+      currentId = id;
+      note.value = n.text;
+      showStatus('Сохранено ' + n.time);
+      setEditing(false);
+      renderList();
+    }
+
+    function startNewNote() {
+      if (hasUnsavedChanges()) {
+        showStatus('Сначала сохраните текущую заметку', true);
+        return;
+      }
+      currentId = null;
+      note.value = '';
+      showStatus('Новая заметка');
+      setEditing(true);
+      renderList();
+    }
+
+    function writeStorage() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+        localStorage.setItem(TRASH_KEY, JSON.stringify(trash));
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function load() {
+      try {
+        notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        trash = JSON.parse(localStorage.getItem(TRASH_KEY)) || [];
+        // Переносим заметку из старой версии страницы, чтобы она не потерялась
+        const old = JSON.parse(localStorage.getItem(OLD_KEY));
+        if (old && old.text) {
+          notes.unshift({ id: Date.now(), text: old.text, time: old.time });
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+          localStorage.removeItem(OLD_KEY);
+        }
+      } catch (e) {
+        banner.classList.add('show');
+      }
+      startNewNote();
+    }
+
+    saveBtn.addEventListener('click', () => {
+      if (note.value.trim() === '') {
+        showStatus('Заметка пустая — напишите что-нибудь', true);
+        return;
+      }
+      const time = new Date().toLocaleString('ru-RU', {
+        day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
+      });
+      const previous = notes.map(n => ({ ...n }));
+
+      const existing = currentNote();
+      if (existing) {
+        existing.text = note.value;
+        existing.time = time;
+      } else {
+        currentId = Date.now();
+        notes.unshift({ id: currentId, text: note.value, time });
+      }
+
+      if (!writeStorage()) {
+        // Откатываем изменения и не блокируем поле — иначе кажется, что всё сохранилось
+        notes = previous;
+        if (!existing) currentId = null;
+        banner.classList.add('show');
+        showStatus('Не сохранено', true);
+        return;
+      }
+      // Очищаем поле, чтобы сразу можно было писать следующую заметку
+      currentId = null;
+      note.value = '';
+      setEditing(true);
+      showStatus('Сохранено ' + time + '. Можно писать следующую');
+      renderList();
+    });
+
+    editBtn.addEventListener('click', () => {
+      showStatus('Редактирование...');
+      setEditing(true);
+    });
+
+    newBtn.addEventListener('click', startNewNote);
+
+    // «Отменить» — закрывает открытую заметку без сохранения и освобождает поле
+    function cancelNote() {
+      if (currentId === null) return;
+      const hadChanges = hasUnsavedChanges();
+      currentId = null;
+      note.value = '';
+      setEditing(true);
+      showStatus(hadChanges ? 'Изменения отменены' : 'Новая заметка');
+      renderList();
+    }
+    cancelBtn.addEventListener('click', cancelNote);
+
+    // ---------- Экспорт в файл ----------
+    const exportBtn = document.getElementById('exportBtn');
+    const exportMenu = document.getElementById('exportMenu');
+
+    function openExportMenu() {
+      exportMenu.hidden = false;
+      exportBtn.setAttribute('aria-expanded', 'true');
+      exportMenu.querySelector('button').focus();
+    }
+    function closeExportMenu() {
+      exportMenu.hidden = true;
+      exportBtn.setAttribute('aria-expanded', 'false');
+    }
+    exportBtn.addEventListener('click', () => {
+      exportMenu.hidden ? openExportMenu() : closeExportMenu();
+    });
+    // Клик мимо меню закрывает его
+    document.addEventListener('click', (e) => {
+      if (!exportMenu.hidden && !e.target.closest('.export')) closeExportMenu();
+    });
+    exportMenu.querySelectorAll('[data-format]').forEach(b => {
+      b.addEventListener('click', () => {
+        closeExportMenu();
+        exportNotes(b.dataset.format);
+      });
+    });
+
+    const COPYRIGHT = '© 2026 Кобызев С. Е. Все права защищены.';
+    const COPYRIGHT_LINE = `Создано в приложении «Заметно» · ${COPYRIGHT}`;
+
+    // Дата для имени файла: 2026-09-29
+    function fileDate() {
+      const d = new Date();
+      const pad = (x) => String(x).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    function notesAsText() {
+      const done = notes.filter(n => n.done).length;
+      const out = [
+        'Мои заметки',
+        `Экспорт: ${nowText()}`,
+        `Всего: ${notes.length} (выполнено: ${done}, не выполнено: ${notes.length - done})`,
+        '',
+      ];
+      for (const n of notes) {
+        const lines = n.text.trim().split('\n');
+        out.push(`${n.done ? '[✓]' : '[ ]'} ${lines[0]}`);
+        for (const l of lines.slice(1)) out.push('    ' + l);
+        out.push(`    — ${n.time}`, '');
+      }
+      out.push(COPYRIGHT_LINE);
+      // \r\n — чтобы переносы строк были видны в любом Блокноте
+      return out.join('\r\n');
+    }
+
+    function notesAsJson() {
+      return JSON.stringify({
+        app: 'Заметно',
+        copyright: COPYRIGHT,
+        exportedAt: new Date().toISOString(),
+        notes,
+        trash,
+      }, null, 2);
+    }
+
+    function download(filename, content, type) {
+      // ﻿ в начале — чтобы русский текст корректно открылся в старых программах
+      downloadBlob(filename, new Blob(['﻿' + content], { type: type + ';charset=utf-8' }));
+    }
+
+    function downloadBlob(filename, blob) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    // ---------- XLSX: собираем файл сами, без внешних библиотек ----------
+    // .xlsx — это zip-архив с несколькими XML-файлами внутри.
+
+    function xmlEscape(s) {
+      return String(s)
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '') // символы, запрещённые в XML
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function notesAsXlsx() {
+      const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+      const MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+      const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+      const PKG = 'http://schemas.openxmlformats.org/package/2006/relationships';
+
+      // Стили: 0 — обычный, 1 — заголовок, 2 — текст с переносом,
+      // 3 — «Выполнено» (зелёный), 4 — прочие ячейки (по верхнему краю)
+      const S = { head: 1, wrap: 2, done: 3, top: 4 };
+      const styles = XML +
+        `<styleSheet xmlns="${MAIN}">` +
+        '<fonts count="3">' +
+          '<font><sz val="11"/><name val="Calibri"/></font>' +
+          '<font><b/><sz val="11"/><name val="Calibri"/></font>' +
+          '<font><sz val="11"/><color rgb="FF3F7F63"/><name val="Calibri"/></font>' +
+        '</fonts>' +
+        '<fills count="3">' +
+          '<fill><patternFill patternType="none"/></fill>' +
+          '<fill><patternFill patternType="gray125"/></fill>' +
+          '<fill><patternFill patternType="solid"><fgColor rgb="FFE9EFF7"/><bgColor indexed="64"/></patternFill></fill>' +
+        '</fills>' +
+        '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+        '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+        '<cellXfs count="5">' +
+          '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+          '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
+          '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>' +
+          '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
+          '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top"/></xf>' +
+        '</cellXfs>' +
+        '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+        '</styleSheet>';
+
+      const text = (ref, value, style) =>
+        `<c r="${ref}" t="inlineStr" s="${style}"><is><t xml:space="preserve">${xmlEscape(value)}</t></is></c>`;
+      const num = (ref, value, style) => `<c r="${ref}" s="${style}"><v>${value}</v></c>`;
+
+      const rows = ['<row r="1">' +
+        text('A1', '№', S.head) + text('B1', 'Заметка', S.head) +
+        text('C1', 'Статус', S.head) + text('D1', 'Дата', S.head) + '</row>'];
+      notes.forEach((n, i) => {
+        const r = i + 2;
+        rows.push(`<row r="${r}">` +
+          num(`A${r}`, i + 1, S.top) +
+          text(`B${r}`, n.text.trim(), S.wrap) +
+          text(`C${r}`, n.done ? 'Выполнено' : 'Не выполнено', n.done ? S.done : S.top) +
+          text(`D${r}`, n.time, S.top) + '</row>');
+      });
+
+      const sheet = XML +
+        `<worksheet xmlns="${MAIN}">` +
+        // Закрепляем строку заголовка
+        '<sheetViews><sheetView workbookViewId="0">' +
+          '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>' +
+        '</sheetView></sheetViews>' +
+        '<cols>' +
+          '<col min="1" max="1" width="5" customWidth="1"/>' +
+          '<col min="2" max="2" width="60" customWidth="1"/>' +
+          '<col min="3" max="3" width="15" customWidth="1"/>' +
+          '<col min="4" max="4" width="22" customWidth="1"/>' +
+        '</cols>' +
+        `<sheetData>${rows.join('')}</sheetData>` +
+        '</worksheet>';
+
+      const files = {
+        '[Content_Types].xml': XML +
+          '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+          '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+          '<Default Extension="xml" ContentType="application/xml"/>' +
+          '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+          '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+          '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+          '</Types>',
+        '_rels/.rels': XML +
+          `<Relationships xmlns="${PKG}">` +
+          `<Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/>` +
+          '</Relationships>',
+        'xl/workbook.xml': XML +
+          `<workbook xmlns="${MAIN}" xmlns:r="${REL}">` +
+          '<sheets><sheet name="Заметки" sheetId="1" r:id="rId1"/></sheets>' +
+          '</workbook>',
+        'xl/_rels/workbook.xml.rels': XML +
+          `<Relationships xmlns="${PKG}">` +
+          `<Relationship Id="rId1" Type="${REL}/worksheet" Target="worksheets/sheet1.xml"/>` +
+          `<Relationship Id="rId2" Type="${REL}/styles" Target="styles.xml"/>` +
+          '</Relationships>',
+        'xl/styles.xml': styles,
+        'xl/worksheets/sheet1.xml': sheet,
+      };
+      return zipFiles(files);
+    }
+
+    // Простейший zip-архив без сжатия — его понимают все программы
+    const CRC_TABLE = (() => {
+      const t = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+        t[n] = c >>> 0;
+      }
+      return t;
+    })();
+
+    function crc32(bytes) {
+      let c = 0xFFFFFFFF;
+      for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+      return (c ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    function zipFiles(files) {
+      const enc = new TextEncoder();
+      const d = new Date();
+      const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+      const dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+
+      const parts = [];
+      const central = [];
+      let offset = 0;
+
+      for (const [name, content] of Object.entries(files)) {
+        const nameBytes = enc.encode(name);
+        const data = enc.encode(content);
+        const crc = crc32(data);
+
+        const local = new DataView(new ArrayBuffer(30));
+        local.setUint32(0, 0x04034b50, true);  // подпись записи
+        local.setUint16(4, 20, true);           // версия
+        local.setUint16(6, 0, true);            // флаги
+        local.setUint16(8, 0, true);            // без сжатия
+        local.setUint16(10, dosTime, true);
+        local.setUint16(12, dosDate, true);
+        local.setUint32(14, crc, true);
+        local.setUint32(18, data.length, true);
+        local.setUint32(22, data.length, true);
+        local.setUint16(26, nameBytes.length, true);
+        local.setUint16(28, 0, true);
+        parts.push(local, nameBytes, data);
+
+        const cd = new DataView(new ArrayBuffer(46));
+        cd.setUint32(0, 0x02014b50, true);      // подпись записи оглавления
+        cd.setUint16(4, 20, true);
+        cd.setUint16(6, 20, true);
+        cd.setUint16(8, 0, true);
+        cd.setUint16(10, 0, true);
+        cd.setUint16(12, dosTime, true);
+        cd.setUint16(14, dosDate, true);
+        cd.setUint32(16, crc, true);
+        cd.setUint32(20, data.length, true);
+        cd.setUint32(24, data.length, true);
+        cd.setUint16(28, nameBytes.length, true);
+        cd.setUint32(42, offset, true);         // где лежит запись
+        central.push(cd, nameBytes);
+
+        offset += 30 + nameBytes.length + data.length;
+      }
+
+      const cdSize = central.reduce((sum, p) => sum + p.byteLength, 0);
+      const end = new DataView(new ArrayBuffer(22));
+      end.setUint32(0, 0x06054b50, true);       // конец оглавления
+      end.setUint16(8, Object.keys(files).length, true);
+      end.setUint16(10, Object.keys(files).length, true);
+      end.setUint32(12, cdSize, true);
+      end.setUint32(16, offset, true);
+
+      return new Blob([...parts, ...central, end], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+    }
+
+    // ---------- PDF: аккуратный документ для печати → «Сохранить как PDF» ----------
+    function buildPrintArea() {
+      const area = document.getElementById('printArea');
+      area.innerHTML = '';
+      const done = notes.filter(n => n.done);
+      const todo = notes.filter(n => !n.done);
+
+      const h1 = document.createElement('h1');
+      h1.textContent = 'Заметно — мои заметки';
+      const meta = document.createElement('p');
+      meta.className = 'print-meta';
+      meta.textContent = `Экспорт: ${nowText()} · Всего: ${notes.length} · ` +
+        `Не выполнено: ${todo.length} · Выполнено: ${done.length}`;
+      area.append(h1, meta);
+      if (notes.length === 0) {
+        const p = document.createElement('p');
+        p.textContent = 'Заметок пока нет.';
+        area.append(p);
+      }
+
+      for (const [title, items, isDone] of [['Не выполнено', todo, false], ['Выполнено', done, true]]) {
+        if (items.length === 0) continue;
+        const h2 = document.createElement('h2');
+        if (isDone) h2.className = 'p-h-done';
+        h2.textContent = `${title} (${items.length})`;
+        const ul = document.createElement('ul');
+        for (const n of items) {
+          const li = document.createElement('li');
+          li.className = isDone ? 'p-done' : 'p-todo';
+          const box = document.createElement('span');
+          box.className = 'p-box';
+          box.textContent = isDone ? '☑' : '☐';
+          const body = document.createElement('div');
+          const t = document.createElement('div');
+          t.className = 'p-text';
+          t.textContent = n.text.trim();
+          const date = document.createElement('div');
+          date.className = 'p-date';
+          date.textContent = n.time;
+          body.append(t, date);
+          li.append(box, body);
+          ul.append(li);
+        }
+        area.append(h2, ul);
+      }
+
+      const foot = document.createElement('p');
+      foot.className = 'print-foot';
+      foot.textContent = COPYRIGHT_LINE;
+      area.append(foot);
+    }
+
+    // Документ собирается перед любой печатью — и из меню, и по Ctrl+P
+    window.addEventListener('beforeprint', buildPrintArea);
+
+    function exportPdf() {
+      buildPrintArea(); // на случай браузеров без события beforeprint
+      // Имя PDF-файла по умолчанию берётся из заголовка страницы
+      const oldTitle = document.title;
+      document.title = `заметки-${fileDate()}`;
+      window.addEventListener('afterprint', () => { document.title = oldTitle; }, { once: true });
+      showStatus('В окне печати выберите «Сохранить как PDF»');
+      window.print();
+    }
+
+    function exportNotes(format) {
+      if (notes.length === 0 && (format !== 'json' || trash.length === 0)) {
+        showStatus('Пока нечего экспортировать', true);
+        return;
+      }
+      if (format === 'pdf') { exportPdf(); return; }
+      const name = `заметки-${fileDate()}.${format}`;
+      if (format === 'xlsx') downloadBlob(name, notesAsXlsx());
+      else if (format === 'txt') download(name, notesAsText(), 'text/plain');
+      else download(name, notesAsJson(), 'application/json');
+      showStatus(`Файл «${name}» скачан`);
+    }
+
+    deleteBtn.addEventListener('click', deleteCurrentNote);
+    confirmTwice(clearTrashBtn, 'Очистить корзину', 'Точно очистить?', clearTrash);
+
+    // Ctrl+S — быстрое сохранение
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (!saveBtn.disabled) saveBtn.click();
+      }
+      // Esc сначала закрывает меню экспорта
+      if (e.key === 'Escape' && !exportMenu.hidden) {
+        closeExportMenu();
+        exportBtn.focus();
+        return;
+      }
+      // Esc — то же, что «Отменить»
+      if (e.key === 'Escape' && !cancelBtn.disabled) {
+        e.preventDefault();
+        cancelNote();
+      }
+    });
+
+    load();
+
+    // ---------- Приложение: работа без интернета и установка ----------
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+
+    // Кнопка «Установить» появляется, только когда браузер готов установить приложение
+    const installBtn = document.getElementById('installBtn');
+    let installPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      installPrompt = e;
+      installBtn.hidden = false;
+    });
+    installBtn.addEventListener('click', async () => {
+      if (!installPrompt) return;
+      installPrompt.prompt();
+      await installPrompt.userChoice;
+      installPrompt = null;
+      installBtn.hidden = true;
+    });
+    window.addEventListener('appinstalled', () => {
+      installBtn.hidden = true;
+      showStatus('«Заметно» установлено — ищите значок на рабочем столе или домашнем экране');
+    });
+  </script>
+</body>
+</html>
