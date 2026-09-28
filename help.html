@@ -4,6 +4,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    // Та же тема, что в приложении: выбранная вручную или как в системе
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem('my-notes-theme'); } catch (e) {}
+      if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   <title>Заметно — инструкция пользователя</title>
   <meta name="author" content="Кобызев С. Е.">
   <link rel="manifest" href="manifest.webmanifest">
@@ -23,9 +32,12 @@
       --done: #3f7f63;
       --done-soft: #f0f7f2;
       --code: #eef0f3;
+      color-scheme: light;
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
+    /* Тёмная тема — та же, что выбрана в приложении (кнопка ☾/☀) */
+    @media screen {
+      :root[data-theme="dark"] {
+        color-scheme: dark;
         --bg: #121417;
         --card: #1b1f24;
         --text: #e6e8eb;
@@ -202,6 +214,8 @@
         <li>Работает на телефоне, планшете и компьютере.</li>
         <li>После первого открытия работает <b>без интернета</b>.</li>
         <li>Заметки хранятся <b>только на вашем устройстве</b> и никуда не отправляются.</li>
+        <li>Светлая и тёмная тема: кнопка <b>☾</b> / <b>☀</b> вверху, рядом с «?». Пока тема не выбрана,
+          приложение следует настройке устройства; выбранная тема запоминается.</li>
       </ul>
 
       <h2 id="install">2. Установка</h2>

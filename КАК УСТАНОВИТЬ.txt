@@ -48,7 +48,7 @@ https://kobyzev8051-creator.github.io/zametno/
 Приложение размещено на GitHub Pages:
 https://github.com/kobyzev8051-creator/zametno
 Обновление: изменить файлы, увеличить номер версии в sw.js
-(const CACHE = 'zametno-v4' → 'zametno-v5') и отправить на GitHub —
+(const CACHE = 'zametno-v5' → 'zametno-v6') и отправить на GitHub —
 установленные приложения обновятся сами.
 
 
