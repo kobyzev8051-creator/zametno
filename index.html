@@ -484,6 +484,28 @@
     .export-menu button:hover { background: var(--secondary); }
     .export-menu b { display: block; font-size: 0.9rem; }
     .export-menu span { display: block; font-size: 0.8rem; color: var(--muted); }
+    .menu-sep { height: 1px; margin: 6px 4px; background: var(--border); }
+
+    /* Окно подтверждения импорта */
+    .dialog {
+      width: calc(100% - 32px);
+      max-width: 460px;
+      padding: 22px;
+      color: var(--text);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 20px 50px rgba(16, 24, 40, 0.25);
+    }
+    .dialog::backdrop { background: rgba(16, 24, 40, 0.4); }
+    .dialog h3 { margin: 0 0 8px; font-size: 1.15rem; }
+    .dialog p { margin: 0 0 14px; line-height: 1.5; }
+    .dialog-actions { display: flex; flex-direction: column; gap: 8px; }
+    .dialog-actions button { background: var(--secondary); color: var(--text); }
+    .dialog-actions button:hover { background: var(--secondary-hover); }
+    .dialog-actions .primary { background: var(--accent); color: #fff; }
+    .dialog-actions .primary:hover { background: var(--accent-hover); }
+    .dialog-hint { margin: 14px 0 0 !important; font-size: 0.85rem; color: var(--muted); }
 
     /* Переключатель вида списка */
     .view-switch {
@@ -727,7 +749,7 @@
           <button data-view="grouped" aria-pressed="false">По статусу</button>
         </div>
         <div class="export">
-          <button class="icon-btn" id="exportBtn" title="Экспорт в файл" aria-label="Экспорт в файл"
+          <button class="icon-btn" id="exportBtn" title="Экспорт и импорт" aria-label="Экспорт и импорт"
                   aria-haspopup="menu" aria-expanded="false">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -752,7 +774,14 @@
               <b>Резервная копия (.json)</b>
               <span>Все данные, включая корзину</span>
             </button>
+            <div class="menu-sep" role="separator"></div>
+            <p class="menu-title">Загрузка из файла</p>
+            <button role="menuitem" id="importMenuBtn">
+              <b>Импорт из резервной копии (.json)</b>
+              <span>Вернуть или перенести заметки</span>
+            </button>
           </div>
+          <input type="file" id="importFile" accept=".json,application/json" hidden>
         </div>
       </div>
     </div>
@@ -781,6 +810,19 @@
 
   <!-- Документ для печати / PDF — заполняется при экспорте, на экране не виден -->
   <div id="printArea" aria-hidden="true"></div>
+
+  <!-- Подтверждение импорта из резервной копии -->
+  <dialog id="importDialog" class="dialog" aria-labelledby="importTitle">
+    <h3 id="importTitle">Импорт из резервной копии</h3>
+    <p id="importSummary"></p>
+    <div class="dialog-actions">
+      <button id="importMerge" class="primary">Добавить к моим заметкам</button>
+      <button id="importReplace">Заменить мои заметки</button>
+      <button id="importCancel">Отмена</button>
+    </div>
+    <p class="dialog-hint">«Добавить» — заметки из копии появятся в конце списка, повторы пропускаются.<br>
+      «Заменить» — ваши текущие заметки перейдут в корзину, их можно будет восстановить.</p>
+  </dialog>
 
   <script>
     const note = document.getElementById('note');
@@ -1386,6 +1428,149 @@
       });
     });
 
+    // ---------- Импорт из резервной копии (.json) ----------
+    const importFile = document.getElementById('importFile');
+    const importDialog = document.getElementById('importDialog');
+    const importSummary = document.getElementById('importSummary');
+    let pendingImport = null;
+
+    document.getElementById('importMenuBtn').addEventListener('click', () => {
+      closeExportMenu();
+      if (hasUnsavedChanges()) {
+        showStatus('Сначала сохраните текущую заметку', true);
+        return;
+      }
+      importFile.value = '';
+      importFile.click();
+    });
+
+    // Берём из файла только понятные поля; всё лишнее и повреждённое отбрасываем
+    function parseBackup(data) {
+      const rawNotes = Array.isArray(data) ? data : (data && Array.isArray(data.notes) ? data.notes : null);
+      if (!rawNotes) return null;
+      const rawTrash = !Array.isArray(data) && Array.isArray(data.trash) ? data.trash : [];
+      const clean = (n) => (n && typeof n.text === 'string' && n.text.trim())
+        ? { id: Number.isFinite(n.id) ? n.id : null, text: n.text, time: typeof n.time === 'string' ? n.time : '', done: !!n.done }
+        : null;
+      const cleanTrash = (t) => {
+        const n = clean(t);
+        if (!n) return null;
+        n.deletedAt = typeof t.deletedAt === 'string' ? t.deletedAt : nowText();
+        n.pos = Number.isFinite(t.pos) ? t.pos : 1e9;          // без позиции — в конец списка
+        if (t.prevId === null || Number.isFinite(t.prevId)) n.prevId = t.prevId;
+        return n;
+      };
+      return { notes: rawNotes.map(clean).filter(Boolean), trash: rawTrash.map(cleanTrash).filter(Boolean) };
+    }
+
+    importFile.addEventListener('change', async () => {
+      const file = importFile.files[0];
+      if (!file) return;
+      if (file.size > 5 * 1024 * 1024) {
+        showStatus('Файл слишком большой для резервной копии заметок', true);
+        return;
+      }
+      let data;
+      try {
+        data = JSON.parse((await file.text()).replace(/^﻿/, ''));
+      } catch (e) {
+        showStatus('Не удалось прочитать файл: это не резервная копия «Заметно»', true);
+        return;
+      }
+      const parsed = parseBackup(data);
+      if (!parsed) {
+        showStatus('В файле нет заметок «Заметно» — выберите файл резервной копии (.json)', true);
+        return;
+      }
+      if (parsed.notes.length === 0 && parsed.trash.length === 0) {
+        showStatus('Резервная копия пустая — загружать нечего', true);
+        return;
+      }
+      pendingImport = parsed;
+      const done = parsed.notes.filter(n => n.done).length;
+      importSummary.textContent =
+        `Файл «${file.name}»: заметок — ${parsed.notes.length} ` +
+        `(выполнено ${done}, не выполнено ${parsed.notes.length - done})` +
+        (parsed.trash.length ? `, в корзине — ${parsed.trash.length}` : '') +
+        `. Сейчас у вас заметок — ${notes.length}.`;
+      importDialog.showModal();
+    });
+
+    // Выдаёт номер, которого ещё нет ни в заметках, ни в корзине
+    function makeIdGiver() {
+      const used = new Set([...notes, ...trash].map(x => x.id));
+      let seed = Date.now();
+      return (wanted) => {
+        let id = wanted;
+        if (id === null || used.has(id)) {
+          while (used.has(seed)) seed++;
+          id = seed;
+        }
+        used.add(id);
+        return id;
+      };
+    }
+
+    function importMerge(imp) {
+      takeSnapshot();
+      const giveId = makeIdGiver();
+      const existing = [...notes, ...trash];
+      const isRepeat = (n) => n.id !== null && existing.some(x => x.id === n.id && x.text === n.text);
+      let added = 0, addedTrash = 0, skipped = 0;
+      for (const n of imp.notes) {
+        if (isRepeat(n)) { skipped++; continue; }
+        notes.push({ ...n, id: giveId(n.id) });
+        added++;
+      }
+      for (const t of imp.trash) {
+        if (isRepeat(t)) { skipped++; continue; }
+        trash.push({ ...t, id: giveId(t.id) });
+        addedTrash++;
+      }
+      if (!commit('Не удалось загрузить заметки')) return;
+      renderList();
+      showStatus(`Загружено заметок: ${added}` +
+        (addedTrash ? `, в корзину: ${addedTrash}` : '') +
+        (skipped ? `. Пропущено повторов: ${skipped}` : ''));
+    }
+
+    function importReplace(imp) {
+      takeSnapshot();
+      // Текущие заметки не удаляем — переносим в корзину
+      const now = nowText();
+      const old = notes;
+      old.forEach((n, i) => trash.unshift({ ...n, pos: i, prevId: i > 0 ? old[i - 1].id : null, deletedAt: now }));
+      notes = [];
+      const giveId = makeIdGiver(); // номера старых заметок (теперь в корзине) заняты
+      notes = imp.notes.map(n => ({ ...n, id: giveId(n.id) }));
+      // Корзину из копии добавляем, пропуская то, что уже лежит в корзине
+      const inTrash = trash.slice();
+      for (const t of imp.trash) {
+        if (t.id !== null && inTrash.some(x => x.id === t.id && x.text === t.text)) continue;
+        trash.push({ ...t, id: giveId(t.id) });
+      }
+      if (!commit('Не удалось загрузить заметки')) return;
+      currentId = null;
+      note.value = '';
+      setEditing(true);
+      renderList();
+      showStatus(`Заметки заменены: загружено ${notes.length}` +
+        (old.length ? `. Прежние (${old.length}) — в корзине` : ''));
+    }
+
+    function finishImport(mode) {
+      const imp = pendingImport;
+      pendingImport = null;
+      importDialog.close();
+      if (!imp) return;
+      if (mode === 'merge') importMerge(imp);
+      if (mode === 'replace') importReplace(imp);
+    }
+    document.getElementById('importMerge').addEventListener('click', () => finishImport('merge'));
+    document.getElementById('importReplace').addEventListener('click', () => finishImport('replace'));
+    document.getElementById('importCancel').addEventListener('click', () => finishImport(null));
+    importDialog.addEventListener('cancel', () => { pendingImport = null; }); // закрыли по Esc
+
     const COPYRIGHT = '© 2026 Кобызев С. Е. Все права защищены.';
     const COPYRIGHT_LINE = `Создано в приложении «Заметно» · ${COPYRIGHT}`;
 
@@ -1702,6 +1887,7 @@
 
     // Ctrl+S — быстрое сохранение
     document.addEventListener('keydown', (e) => {
+      if (importDialog.open) return; // пока открыто окно импорта, клавиши обрабатывает оно само
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (!saveBtn.disabled) saveBtn.click();
