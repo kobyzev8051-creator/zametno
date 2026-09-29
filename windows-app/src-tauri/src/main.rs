@@ -43,7 +43,16 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![save_file])
         .setup(|app| {
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+            let mut window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()));
+            // Стандартная настройка WebView2 (WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS) не применяется,
+            // когда программа задаёт свои параметры движка, — передаём её вместе с параметрами Tauri.
+            // Нужна для автоматической проверки; у обычного пользователя эта настройка не задана.
+            if let Ok(extra) = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS") {
+                window = window.additional_browser_args(&format!(
+                    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection {extra}"
+                ));
+            }
+            window
                 .title("Заметно")
                 .inner_size(900.0, 900.0)
                 .min_inner_size(380.0, 520.0)
