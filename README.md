@@ -8,6 +8,8 @@
 
 **Открыть приложение:** https://kobyzev8051-creator.github.io/zametno/
 
+**Android (файл APK):** https://github.com/kobyzev8051-creator/zametno/releases/latest/download/Zametno.apk
+
 ## Установка
 
 - **Android (Chrome):** кнопка «Установить» в приложении или меню ⋮ → «Установить приложение».

@@ -83,7 +83,6 @@ jobs:
     name: Проверка в эмуляторе Android
     needs: build
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -127,6 +126,15 @@ jobs:
           adb exec-out screencap -p > screen-after-restart.png
           adb logcat -d > logcat-full.txt
           grep -iE "Capacitor|Console|chromium|AndroidRuntime|zametno" logcat-full.txt > logcat.txt || true
+          # Автоматическая сверка: заметка должна быть на экране после перезапуска
+          adb shell uiautomator dump /sdcard/ui.xml
+          adb pull /sdcard/ui.xml ui.xml
+          if grep -q "Proverka APK" ui.xml; then
+            echo "ПРОВЕРКА ПРОЙДЕНА: заметка сохранилась после перезапуска"
+          else
+            echo "ОШИБКА: заметка не найдена после перезапуска приложения"
+            exit 1
+          fi
           EOF
 
       - uses: reactivecircus/android-emulator-runner@v2
@@ -145,3 +153,45 @@ jobs:
           path: |
             screen-*.png
             logcat.txt
+            ui.xml
+
+  release:
+    name: Публикация APK по постоянной ссылке
+    needs: [build, check]
+    # Только для основной ветки и только если проверка в эмуляторе прошла
+    if: github.ref == 'refs/heads/main' && needs.check.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: zametno-apk
+
+      - name: Обновить выпуск «android» (ссылка …/releases/latest/download/Zametno.apk)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VER: 1.0.${{ github.run_number }}
+        run: |
+          cat > notes.md << EOF
+          **Заметно для Android — версия $VER**
+
+          Постоянная ссылка на последнюю версию:
+          https://github.com/$REPO/releases/latest/download/Zametno.apk
+
+          **Установка:** откройте файл на телефоне → если попросит, разрешите установку из этого источника → «Установить».
+          **Обновление:** установите новый файл поверх — заметки сохранятся.
+
+          Веб-версия (iPhone, компьютер): https://kobyzev8051-creator.github.io/zametno/
+
+          © 2026 Кобызев С. Е. Все права защищены.
+          EOF
+          if gh release view android --repo "$REPO" > /dev/null 2>&1; then
+            gh release upload android Zametno.apk --clobber --repo "$REPO"
+            gh release edit android --repo "$REPO" --title "Заметно для Android $VER" --notes-file notes.md --latest
+          else
+            gh release create android Zametno.apk --repo "$REPO" --target "$GITHUB_SHA" \
+              --title "Заметно для Android $VER" --notes-file notes.md --latest
+          fi
+          gh release view android --repo "$REPO"
