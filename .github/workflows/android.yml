@@ -132,7 +132,8 @@ jobs:
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
-          target: google_apis
+          # Чистый Android без сервисов Google: на серверах сборки они падают и закрывают приложение
+          target: default
           arch: x86_64
           disable-animations: true
           script: bash check.sh
