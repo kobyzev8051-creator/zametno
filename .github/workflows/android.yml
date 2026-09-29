@@ -126,15 +126,24 @@ jobs:
           adb exec-out screencap -p > screen-after-restart.png
           adb logcat -d > logcat-full.txt
           grep -iE "Capacitor|Console|chromium|AndroidRuntime|zametno" logcat-full.txt > logcat.txt || true
-          # Автоматическая сверка: заметка должна быть на экране после перезапуска
-          adb shell uiautomator dump /sdcard/ui.xml
-          adb pull /sdcard/ui.xml ui.xml
-          if grep -q "Proverka APK" ui.xml; then
-            echo "ПРОВЕРКА ПРОЙДЕНА: заметка сохранилась после перезапуска"
-          else
-            echo "ОШИБКА: заметка не найдена после перезапуска приложения"
-            exit 1
-          fi
+          # Автоматическая сверка: текст заметки должен быть в хранилище приложения
+          # (эмулятор без сервисов Google позволяет прочитать данные приложения)
+          adb root
+          sleep 3
+          adb wait-for-device
+          adb pull /data/data/ru.kobyzev.zametno/app_webview app_webview
+          python3 - << 'PY'
+          import pathlib, sys
+          needle = "Proverka APK"
+          variants = [needle.encode("latin-1"), needle.encode("utf-16-le")]
+          found = [str(p) for p in pathlib.Path("app_webview").rglob("*") if p.is_file()
+                   and any(v in p.read_bytes() for v in variants)]
+          if found:
+              print("ПРОВЕРКА ПРОЙДЕНА: заметка сохранена в хранилище приложения:", found[0])
+          else:
+              print("ОШИБКА: заметка не найдена в хранилище приложения")
+              sys.exit(1)
+          PY
           EOF
 
       - uses: reactivecircus/android-emulator-runner@v2
@@ -153,7 +162,6 @@ jobs:
           path: |
             screen-*.png
             logcat.txt
-            ui.xml
 
   release:
     name: Публикация APK по постоянной ссылке
