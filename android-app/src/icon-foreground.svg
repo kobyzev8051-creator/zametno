@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Передний план адаптивного значка Android: рисунок без фона, уменьшен в безопасную зону -->
+  <g transform="translate(256 256) scale(0.62) translate(-262 -264)">
+    <path d="M168 104h132l72 72v220a28 28 0 0 1-28 28H168a28 28 0 0 1-28-28V132a28 28 0 0 1 28-28z" fill="#ffffff"/>
+    <path d="M300 104v44a28 28 0 0 0 28 28h44z" fill="#c9d6e8"/>
+    <rect x="180" y="208" width="132" height="18" rx="9" fill="#9db0c9"/>
+    <rect x="180" y="250" width="152" height="18" rx="9" fill="#9db0c9"/>
+    <rect x="180" y="292" width="96" height="18" rx="9" fill="#9db0c9"/>
+    <circle cx="352" cy="372" r="72" fill="#3f7f63" stroke="#3d5a80" stroke-width="14"/>
+    <path d="M318 373l24 24 46-50" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

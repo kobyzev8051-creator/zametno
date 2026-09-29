@@ -1,0 +1,130 @@
+# «Заметно» — сборка Android-приложения (APK) на серверах GitHub.
+# © 2026 Кобызев С. Е. Все права защищены.
+#
+# Запускается при каждой отправке изменений в main и вручную (Actions → Android APK → Run workflow).
+# Готовый файл — в разделе Actions, в результатах запуска: «zametno-apk».
+
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Сборка и подпись APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Проект Capacitor из файлов приложения
+        run: |
+          mkdir build && cd build
+          npm init -y > /dev/null
+          npm install @capacitor/core @capacitor/cli @capacitor/android \
+                      @capacitor/filesystem @capacitor/share @capacitor/app
+          npm install --save-dev @capacitor/assets
+          mkdir www
+          cp ../index.html ../help.html ../manifest.webmanifest ../sw.js www/
+          cp -r ../icons www/
+          cp ../android-app/capacitor.config.json .
+          cp -r ../android-app/assets .
+          npx cap add android
+          npx capacitor-assets generate --android
+          cp ../android-app/java/*.java android/app/src/main/java/ru/kobyzev/zametno/
+          npx cap sync android
+
+      - name: Номер версии
+        run: |
+          cd build/android/app
+          sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/" build.gradle
+          sed -i "s/versionName \"1.0\"/versionName \"1.0.${{ github.run_number }}\"/" build.gradle
+          grep -E "versionCode|versionName" build.gradle
+
+      - name: Сборка
+        run: |
+          cd build/android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Подпись постоянным ключом
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          echo "$KS_B64" | base64 -d > release.p12
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/zipalign" -p -f 4 build/android/app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
+          "$BT/apksigner" sign --ks release.p12 --ks-type PKCS12 --ks-pass env:KS_PASS --out Zametno.apk aligned.apk
+          rm -f release.p12
+          "$BT/apksigner" verify --print-certs Zametno.apk
+          "$BT/aapt2" dump badging Zametno.apk | grep -E "^package|application-label|sdkVersion|targetSdkVersion"
+          ls -la Zametno.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zametno-apk
+          path: Zametno.apk
+
+  check:
+    name: Проверка в эмуляторе Android
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: zametno-apk
+
+      - name: Ускорение эмулятора (KVM)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Сценарий проверки
+        run: |
+          cat > check.sh << 'EOF'
+          set -x
+          adb install -r Zametno.apk
+          adb shell am start -W -n ru.kobyzev.zametno/.MainActivity
+          sleep 20
+          adb exec-out screencap -p > screen-light.png
+          adb shell cmd uimode night yes
+          adb shell am force-stop ru.kobyzev.zametno
+          adb shell am start -W -n ru.kobyzev.zametno/.MainActivity
+          sleep 15
+          adb exec-out screencap -p > screen-dark.png
+          adb shell cmd uimode night no
+          adb logcat -d > logcat-full.txt
+          grep -iE "Capacitor|Console|chromium|AndroidRuntime|zametno" logcat-full.txt > logcat.txt || true
+          EOF
+
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: bash check.sh
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: emulator-check
+          path: |
+            screen-*.png
+            logcat.txt

@@ -1433,6 +1433,23 @@
     const exportBtn = document.getElementById('exportBtn');
     const exportMenu = document.getElementById('exportMenu');
 
+    // Приложение запущено как Android-приложение (APK), а не в браузере
+    const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    const nativePlugin = (name) => window.Capacitor.registerPlugin(name);
+
+    // В Android «скачать» файл нельзя — сохраняем во временную папку
+    // и открываем системное меню «Поделиться» (сохранить в Файлы, на Диск, отправить…)
+    async function shareFileNative(filename, blob) {
+      const base64 = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result).split(',')[1]);
+        r.onerror = reject;
+        r.readAsDataURL(blob);
+      });
+      const { uri } = await nativePlugin('Filesystem').writeFile({ path: filename, data: base64, directory: 'CACHE' });
+      await nativePlugin('Share').share({ title: filename, files: [uri], dialogTitle: 'Сохранить или отправить файл' });
+    }
+
     function openExportMenu() {
       exportMenu.hidden = false;
       exportBtn.setAttribute('aria-expanded', 'true');
@@ -1644,6 +1661,13 @@
     }
 
     function downloadBlob(filename, blob) {
+      if (NATIVE) {
+        shareFileNative(filename, blob).catch((e) => {
+          // Закрытие меню «Поделиться» без выбора — не ошибка
+          if (!/cancel/i.test(String(e && e.message))) showStatus('Не удалось сохранить файл: ' + (e && e.message), true);
+        });
+        return;
+      }
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1894,6 +1918,12 @@
       document.title = `заметки-${fileDate()}`;
       window.addEventListener('afterprint', () => { document.title = oldTitle; }, { once: true });
       showStatus('В окне печати выберите «Сохранить как PDF»');
+      if (NATIVE) {
+        // В Android window.print() не работает — используем системную печать
+        nativePlugin('NotesPrint').print({ name: `заметки-${fileDate()}` })
+          .catch((e) => showStatus('Не удалось открыть печать: ' + (e && e.message), true));
+        return;
+      }
       window.print();
     }
 
@@ -1907,7 +1937,7 @@
       if (format === 'xlsx') downloadBlob(name, notesAsXlsx());
       else if (format === 'txt') download(name, notesAsText(), 'text/plain');
       else download(name, notesAsJson(), 'application/json');
-      showStatus(`Файл «${name}» скачан`);
+      showStatus(NATIVE ? 'Выберите, куда сохранить или отправить файл' : `Файл «${name}» скачан`);
     }
 
     deleteBtn.addEventListener('click', deleteCurrentNote);
@@ -1968,8 +1998,22 @@
     });
 
     // ---------- Приложение: работа без интернета и установка ----------
-    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    // В Android-приложении файлы и так лежат внутри APK — фоновый модуль не нужен
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !NATIVE) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+
+    if (NATIVE) {
+      // Системная кнопка «Назад»: сначала закрывает окна, затем возвращает назад, затем выходит
+      const App = nativePlugin('App');
+      App.addListener('backButton', ({ canGoBack }) => {
+        if (importDialog.open) importDialog.close();
+        else if (!exportMenu.hidden) closeExportMenu();
+        else if (canGoBack) history.back();
+        else App.exitApp();
+      });
+      // Не фильтруем файлы по типу: на Android .json часто помечен как «неизвестный»
+      importFile.removeAttribute('accept');
     }
 
     // Кнопка «Установить» появляется, только когда браузер готов установить приложение

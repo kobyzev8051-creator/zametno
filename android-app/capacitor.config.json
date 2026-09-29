@@ -1,0 +1,8 @@
+{
+  "appId": "ru.kobyzev.zametno",
+  "appName": "Заметно",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#f2f3f5"
+  }
+}
