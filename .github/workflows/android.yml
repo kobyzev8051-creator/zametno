@@ -38,13 +38,12 @@ jobs:
                       @capacitor/filesystem @capacitor/share @capacitor/app
           npm install --save-dev @capacitor/assets
           mkdir www
-          cp ../index.html ../help.html ../manifest.webmanifest ../sw.js www/
-          cp -r ../icons www/
-          cp ../android-app/capacitor.config.json .
-          cp -r ../android-app/assets .
+          cp -r ../app/. www/
+          cp ../android/capacitor.config.json .
+          cp -r ../android/assets .
           npx cap add android
           npx capacitor-assets generate --android
-          cp ../android-app/java/*.java android/app/src/main/java/ru/kobyzev/zametno/
+          cp ../android/java/*.java android/app/src/main/java/ru/kobyzev/zametno/
           npx cap sync android
 
       - name: Номер версии

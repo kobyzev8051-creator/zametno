@@ -1,7 +1,7 @@
-# Простой локальный сервер: открывает сайт по адресу http://localhost:8080/
-# Запуск: powershell -ExecutionPolicy Bypass -File serve.ps1
+# Простой локальный сервер для проверки: открывает приложение из папки app по адресу http://localhost:8080/
+# Запуск из папки проекта: powershell -ExecutionPolicy Bypass -File tools\serve.ps1
 $port = 8080
-$root = $PSScriptRoot
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..\app')).Path
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add("http://localhost:$port/")
 $listener.Start()
