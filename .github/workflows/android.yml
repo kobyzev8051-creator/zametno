@@ -109,6 +109,22 @@ jobs:
           sleep 15
           adb exec-out screencap -p > screen-dark.png
           adb shell cmd uimode night no
+          # Сохранение заметки: ввод текста, Ctrl+S, перезапуск приложения
+          adb shell am force-stop ru.kobyzev.zametno
+          adb shell am start -W -n ru.kobyzev.zametno/.MainActivity
+          sleep 12
+          adb shell input tap 160 360
+          sleep 1
+          adb shell input text "Proverka%sAPK"
+          adb shell input keycombination 113 47
+          sleep 2
+          adb exec-out screencap -p > screen-typed.png
+          adb shell am force-stop ru.kobyzev.zametno
+          adb shell am start -W -n ru.kobyzev.zametno/.MainActivity
+          sleep 12
+          adb shell input swipe 160 560 160 120 400
+          sleep 2
+          adb exec-out screencap -p > screen-after-restart.png
           adb logcat -d > logcat-full.txt
           grep -iE "Capacitor|Console|chromium|AndroidRuntime|zametno" logcat-full.txt > logcat.txt || true
           EOF
