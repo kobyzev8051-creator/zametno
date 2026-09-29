@@ -1437,15 +1437,28 @@
     const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
     const nativePlugin = (name) => window.Capacitor.registerPlugin(name);
 
-    // В Android «скачать» файл нельзя — сохраняем во временную папку
-    // и открываем системное меню «Поделиться» (сохранить в Файлы, на Диск, отправить…)
-    async function shareFileNative(filename, blob) {
-      const base64 = await new Promise((resolve, reject) => {
+    // Приложение запущено как программа для Windows (Tauri)
+    const DESKTOP = !!(window.__TAURI__ && window.__TAURI__.core);
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
         const r = new FileReader();
         r.onload = () => resolve(String(r.result).split(',')[1]);
         r.onerror = reject;
         r.readAsDataURL(blob);
       });
+    }
+
+    // В программе для Windows — обычное окно «Сохранить как»
+    async function saveFileDesktop(filename, blob) {
+      const saved = await window.__TAURI__.core.invoke('save_file', { name: filename, data: await blobToBase64(blob) });
+      showStatus(saved ? `Файл «${filename}» сохранён` : 'Сохранение отменено');
+    }
+
+    // В Android «скачать» файл нельзя — сохраняем во временную папку
+    // и открываем системное меню «Поделиться» (сохранить в Файлы, на Диск, отправить…)
+    async function shareFileNative(filename, blob) {
+      const base64 = await blobToBase64(blob);
       const { uri } = await nativePlugin('Filesystem').writeFile({ path: filename, data: base64, directory: 'CACHE' });
       await nativePlugin('Share').share({ title: filename, files: [uri], dialogTitle: 'Сохранить или отправить файл' });
     }
@@ -1661,6 +1674,10 @@
     }
 
     function downloadBlob(filename, blob) {
+      if (DESKTOP) {
+        saveFileDesktop(filename, blob).catch((e) => showStatus('Не удалось сохранить файл: ' + e, true));
+        return;
+      }
       if (NATIVE) {
         shareFileNative(filename, blob).catch((e) => {
           // Закрытие меню «Поделиться» без выбора — не ошибка
@@ -1937,7 +1954,8 @@
       if (format === 'xlsx') downloadBlob(name, notesAsXlsx());
       else if (format === 'txt') download(name, notesAsText(), 'text/plain');
       else download(name, notesAsJson(), 'application/json');
-      showStatus(NATIVE ? 'Выберите, куда сохранить или отправить файл' : `Файл «${name}» скачан`);
+      if (DESKTOP) showStatus('Выберите, куда сохранить файл');
+      else showStatus(NATIVE ? 'Выберите, куда сохранить или отправить файл' : `Файл «${name}» скачан`);
     }
 
     deleteBtn.addEventListener('click', deleteCurrentNote);
@@ -1998,8 +2016,8 @@
     });
 
     // ---------- Приложение: работа без интернета и установка ----------
-    // В Android-приложении файлы и так лежат внутри APK — фоновый модуль не нужен
-    if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !NATIVE) {
+    // В программах для Android и Windows файлы и так лежат внутри — фоновый модуль не нужен
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !NATIVE && !DESKTOP) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }
 

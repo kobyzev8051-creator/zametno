@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Заметно",
+  "mainBinaryName": "Zametno",
+  "version": "1.0.0",
+  "identifier": "ru.kobyzev.zametno",
+  "build": {
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "publisher": "Кобызев С. Е.",
+    "copyright": "© 2026 Кобызев С. Е. Все права защищены.",
+    "category": "Productivity",
+    "shortDescription": "Заметки и дела",
+    "longDescription": "Заметно — простые заметки с отметкой о выполнении, поиском, корзиной, экспортом в PDF и Excel и резервной копией.",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["Russian"],
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

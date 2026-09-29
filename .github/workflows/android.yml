@@ -176,30 +176,7 @@ jobs:
         with:
           name: zametno-apk
 
-      - name: Обновить выпуск «android» (ссылка …/releases/latest/download/Zametno.apk)
+      - name: Обновить файл в выпуске «app» (ссылка …/releases/latest/download/Zametno.apk)
         env:
           GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          VER: 1.0.${{ github.run_number }}
-        run: |
-          cat > notes.md << EOF
-          **Заметно для Android — версия $VER**
-
-          Постоянная ссылка на последнюю версию:
-          https://github.com/$REPO/releases/latest/download/Zametno.apk
-
-          **Установка:** откройте файл на телефоне → если попросит, разрешите установку из этого источника → «Установить».
-          **Обновление:** установите новый файл поверх — заметки сохранятся.
-
-          Веб-версия (iPhone, компьютер): https://kobyzev8051-creator.github.io/zametno/
-
-          © 2026 Кобызев С. Е. Все права защищены.
-          EOF
-          if gh release view android --repo "$REPO" > /dev/null 2>&1; then
-            gh release upload android Zametno.apk --clobber --repo "$REPO"
-            gh release edit android --repo "$REPO" --title "Заметно для Android $VER" --notes-file notes.md --latest
-          else
-            gh release create android Zametno.apk --repo "$REPO" --target "$GITHUB_SHA" \
-              --title "Заметно для Android $VER" --notes-file notes.md --latest
-          fi
-          gh release view android --repo "$REPO"
+        run: gh release upload app Zametno.apk --clobber --repo "${{ github.repository }}"

@@ -10,6 +10,8 @@
 
 **Android (файл APK):** https://github.com/kobyzev8051-creator/zametno/releases/latest/download/Zametno.apk
 
+**Windows 10 / 11 (установщик):** https://github.com/kobyzev8051-creator/zametno/releases/latest/download/Zametno-Setup.exe
+
 ## Установка
 
 - **Android (Chrome):** кнопка «Установить» в приложении или меню ⋮ → «Установить приложение».

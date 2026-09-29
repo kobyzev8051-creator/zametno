@@ -1,0 +1,127 @@
+# «Заметно» — сборка программы для Windows (установщик Zametno-Setup.exe) на серверах GitHub.
+# © 2026 Кобызев С. Е. Все права защищены.
+#
+# Запускается при каждой отправке изменений в main и вручную (Actions → Windows → Run workflow).
+# При успешной проверке установщик доступен по постоянной ссылке:
+# https://github.com/kobyzev8051-creator/zametno/releases/latest/download/Zametno-Setup.exe
+
+name: Windows
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Сборка установщика
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows-app/src-tauri -> target
+
+      - name: Файлы приложения и номер версии
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory windows-app/dist | Out-Null
+          Copy-Item index.html, help.html, manifest.webmanifest, sw.js windows-app/dist/
+          Copy-Item icons windows-app/dist/icons -Recurse
+          $path = 'windows-app/src-tauri/tauri.conf.json'
+          $conf = Get-Content $path -Raw -Encoding utf8 | ConvertFrom-Json
+          $conf.version = "1.0.${{ github.run_number }}"
+          $conf | ConvertTo-Json -Depth 20 | Set-Content $path -Encoding utf8
+          "Версия: $($conf.version)"
+
+      - name: Значки программы
+        working-directory: windows-app
+        run: npx --yes @tauri-apps/cli@2 icon icon.png -o src-tauri/icons
+
+      - name: Сборка
+        working-directory: windows-app
+        run: npx --yes @tauri-apps/cli@2 build
+
+      - name: Установщик
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem windows-app/src-tauri/target/release/bundle/nsis -Filter *-setup.exe | Select-Object -First 1
+          Copy-Item $setup.FullName Zametno-Setup.exe
+          "Установщик: {0:N1} МБ ({1})" -f ((Get-Item Zametno-Setup.exe).Length / 1MB), $setup.Name
+          (Get-Item Zametno-Setup.exe).VersionInfo | Format-List ProductName, ProductVersion, CompanyName, LegalCopyright
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zametno-windows
+          path: Zametno-Setup.exe
+
+  check:
+    name: Проверка установки и работы
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: zametno-windows
+
+      - name: Тихая установка
+        shell: pwsh
+        run: |
+          Start-Process .\Zametno-Setup.exe -ArgumentList '/S' -Wait
+          $exe = Get-ChildItem $env:LOCALAPPDATA -Recurse -Filter Zametno.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw 'Программа не установилась' }
+          "Установлена: $($exe.FullName)"
+          "EXE=$($exe.FullName)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          $lnk = Get-ChildItem "$env:APPDATA\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter *.lnk | Where-Object Name -like '*Заметно*'
+          "Ярлык в меню «Пуск»: " + ($(if ($lnk) { $lnk.Name } else { 'не найден' }))
+
+      - name: Запуск, создание заметки, перезапуск
+        run: node windows-app/check.mjs "${{ env.EXE }}"
+
+      - name: Удаление программы
+        if: always()
+        shell: pwsh
+        run: |
+          $un = Get-ChildItem (Split-Path $env:EXE) -Filter uninstall.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($un) { Start-Process $un.FullName -ArgumentList '/S' -Wait; 'Удалена' } else { 'Деинсталлятор не найден' }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-check
+          path: win-*.png
+
+  release:
+    name: Публикация по постоянной ссылке
+    needs: [build, check]
+    if: github.ref == 'refs/heads/main' && needs.check.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: zametno-windows
+
+      - name: Обновить файл в выпуске «app»
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload app Zametno-Setup.exe --clobber --repo "${{ github.repository }}"
