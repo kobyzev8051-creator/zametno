@@ -11,21 +11,45 @@ import { writeFileSync } from 'node:fs';
 const exe = process.argv[2];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Снимок всего экрана Windows — чтобы при сбое увидеть окно или сообщение об ошибке
+function desktopShot(file) {
+  const ps = `Add-Type -AssemblyName System.Windows.Forms,System.Drawing;` +
+    `$b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds;` +
+    `$bmp=New-Object System.Drawing.Bitmap $b.Width,$b.Height;` +
+    `$g=[System.Drawing.Graphics]::FromImage($bmp);$g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size);` +
+    `$bmp.Save('${file}')`;
+  try { execSync(`powershell -NoProfile -Command "${ps}"`); } catch (e) { console.log('Снимок экрана не удался:', e.message); }
+}
+
+function processes() {
+  try {
+    return execSync('tasklist /FO CSV /NH', { encoding: 'utf8' })
+      .split('\n').filter((l) => /Zametno|msedgewebview2/i.test(l))
+      .map((l) => l.split('","')[0].replace('"', '')).join(', ') || 'нет';
+  } catch { return '?'; }
+}
+
 async function launch() {
-  spawn(exe, [], {
+  const child = spawn(exe, [], {
     env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9222' },
     detached: true,
     stdio: 'ignore',
-  }).unref();
-  for (let i = 0; i < 90; i++) {
+  });
+  child.on('exit', (code) => console.log('Процесс программы завершился, код:', code));
+  child.unref();
+  let last = '';
+  for (let i = 1; i <= 90; i++) {
     await sleep(1000);
     try {
       const targets = await (await fetch('http://127.0.0.1:9222/json')).json();
+      last = JSON.stringify(targets.map((t) => ({ type: t.type, url: t.url })));
       const page = targets.find((t) => t.type === 'page' && /tauri/.test(t.url));
-      if (page) return page;
-    } catch { /* программа ещё запускается */ }
+      if (page) { console.log(`Окно найдено через ${i} с:`, page.url); return page; }
+    } catch (e) { last = 'отладка не отвечает: ' + e.message; }
+    if (i % 10 === 0) console.log(`${i} с — процессы: ${processes()}; отладка: ${last}`);
   }
-  throw new Error('Окно программы не появилось за 90 секунд');
+  desktopShot('win-0-desktop.png');
+  throw new Error('Окно программы не появилось за 90 секунд. Последний ответ отладки: ' + last);
 }
 
 function connect(wsUrl) {
